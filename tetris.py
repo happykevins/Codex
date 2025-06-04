@@ -160,47 +160,79 @@ def clear_lines(board):
 
 def draw_board(stdscr, board, piece, score):
     stdscr.clear()
+    off_x = 1
+    off_y = 1
+
+    # draw border
+    for x in range(WIDTH * 2):
+        stdscr.addstr(off_y - 1, off_x + x, '-')
+        stdscr.addstr(off_y + HEIGHT, off_x + x, '-')
+    for y in range(HEIGHT):
+        stdscr.addstr(off_y + y, off_x - 1, '|')
+        stdscr.addstr(off_y + y, off_x + WIDTH * 2, '|')
+    stdscr.addstr(off_y - 1, off_x - 1, '+')
+    stdscr.addstr(off_y - 1, off_x + WIDTH * 2, '+')
+    stdscr.addstr(off_y + HEIGHT, off_x - 1, '+')
+    stdscr.addstr(off_y + HEIGHT, off_x + WIDTH * 2, '+')
+
     for y in range(HEIGHT):
         for x in range(WIDTH):
             val = board[y][x]
             char = '[]' if val else '  '
             if val:
-                stdscr.addstr(y, x*2, char, curses.color_pair(val))
+                stdscr.addstr(off_y + y, off_x + x * 2, char, curses.color_pair(val))
             else:
-                stdscr.addstr(y, x*2, char)
+                stdscr.addstr(off_y + y, off_x + x * 2, char)
     for y in range(4):
         for x in range(4):
             if piece.matrix[y][x]:
                 px = piece.x + x
                 py = piece.y + y
                 if 0 <= py < HEIGHT:
-                    stdscr.addstr(py, px*2, '[]', curses.color_pair(COLORS[piece.shape]))
-    stdscr.addstr(0, WIDTH*2 + 2, f'Score: {score}')
+                    stdscr.addstr(off_y + py, off_x + px * 2, '[]', curses.color_pair(COLORS[piece.shape]))
+    stdscr.addstr(off_y, off_x + WIDTH * 2 + 2, f'Score: {score}')
     stdscr.refresh()
+
+
+def get_speed(score):
+    if score >= 20:
+        return 0.3
+    elif score >= 10:
+        return 0.5
+    return 0.7
 
 
 def main(stdscr):
     curses.curs_set(0)
-    for i in range(1,8):
+    stdscr.nodelay(True)
+    for i in range(1, 8):
         curses.init_pair(i, i, 0)
     board = create_board()
     current = Piece(random.choice(list(SHAPES.keys())))
-    next_drop = time.time() + 0.5
+    drop_interval = get_speed(0)
+    next_drop = time.time() + drop_interval
     score = 0
     while True:
         draw_board(stdscr, board, current, score)
         key = stdscr.getch()
         if key == ord('q'):
             break
-        elif key == curses.KEY_LEFT and fits(board, current, dx=-1):
+        elif key in (curses.KEY_LEFT, ord('a')) and fits(board, current, dx=-1):
             current.x -= 1
-        elif key == curses.KEY_RIGHT and fits(board, current, dx=1):
+        elif key in (curses.KEY_RIGHT, ord('d')) and fits(board, current, dx=1):
             current.x += 1
-        elif key == curses.KEY_DOWN and fits(board, current, dy=1):
+        elif key in (curses.KEY_DOWN, ord('s')) and fits(board, current, dy=1):
             current.y += 1
-        elif key == curses.KEY_UP:
-            if fits(board, current, rot=(current.rot+1)):
+        elif key in (curses.KEY_UP, ord('w')) and fits(board, current, dy=-1):
+            current.y -= 1
+        elif key == ord(' '):
+            if fits(board, current, rot=(current.rot + 1)):
                 current.rotate()
+        elif key == ord('g'):
+            removed = sum(1 for row in board if any(row))
+            board = create_board()
+            score += removed
+            drop_interval = get_speed(score)
         if time.time() >= next_drop:
             if fits(board, current, dy=1):
                 current.y += 1
@@ -208,14 +240,16 @@ def main(stdscr):
                 place_piece(board, current)
                 board, cleared = clear_lines(board)
                 score += cleared
+                drop_interval = get_speed(score)
                 current = Piece(random.choice(list(SHAPES.keys())))
                 if not fits(board, current):
                     draw_board(stdscr, board, current, score)
-                    stdscr.addstr(HEIGHT//2, WIDTH, 'GAME OVER')
+                    stdscr.addstr(HEIGHT // 2, WIDTH, 'GAME OVER')
                     stdscr.refresh()
+                    stdscr.nodelay(False)
                     stdscr.getch()
                     break
-            next_drop = time.time() + 0.5
+            next_drop = time.time() + drop_interval
         time.sleep(0.02)
 
 if __name__ == '__main__':
